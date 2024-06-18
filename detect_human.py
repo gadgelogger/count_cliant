@@ -51,32 +51,42 @@ human_results = results_df[results_df['name'] == 'person']
 # 人数をカウント
 person_count = len(human_results)
 
-# 現在のタイムスタンプを取得
-current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-# 既存のレコードを確認する
-query = supabase.table(table_name).select('*').limit(1).execute()
-existing_data = query.data
-
-if existing_data:
-    # 既存のレコードがある場合は更新する
-    res = supabase.table(table_name).update({"person": person_count, "time": current_timestamp}).eq('person', existing_data[0]['person']).execute()
-    print(f"Updated data: {res}")
-else:
-    # 既存のレコードがない場合は挿入する
-    data = {column_name: person_count, "time": current_timestamp}
-    res = supabase.table(table_name).insert(data).execute()
-    print(f"Inserted data: {res}")
-
 # 枠線の描画
 for index, row in human_results.iterrows():
     x1, y1, x2, y2 = int(row['xmin']), int(row['ymin']), int(row['xmax']), int(row['ymax'])
     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-# 撮影した写真を保存する
-image_path = os.path.join(save_directory, "captured_image.jpg")
+# 現在のタイムスタンプを取得
+current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+# 撮影した写真を保存する（枠線描画後のフレームを使用）
+image_filename = "captured_image.jpg"
+image_path = os.path.join(save_directory, image_filename)
 cv2.imwrite(image_path, frame)
 print(f"写真を {image_path} に保存しました")
+
+# 撮影した画像をSupabaseのStorageにアップロード
+with open(image_path, 'rb') as f:
+    image_data = f.read()
+    res = supabase.storage.from_('count').update(path=image_filename, file=image_data, file_options={"upsert": "true"})
+    print(f"画像をSupabaseのStorageにアップロードしました: {res}")
+
+# アップロードした画像のURLを取得
+image_url = supabase.storage.from_('count').get_public_url(image_filename)
+
+# 24時間分のデータを保存するために、最近の24レコードを取得
+recent_records = supabase.table(table_name).select('*').order('time', desc=True).limit(24).execute()
+
+if len(recent_records.data) == 24:
+    # 最も古いレコードを削除
+    oldest_record = recent_records.data[-1]
+    supabase.table(table_name).delete().eq('time', oldest_record['time']).execute()
+
+# 新しいレコードを挿入（画像のURLを含む）
+data = {column_name: person_count, "time": current_timestamp, "image_url": image_url}
+res = supabase.table(table_name).insert(data).execute()
+print(f"Inserted data: {res}")
+
 print(f"人数: {person_count}")
 print(f"タイムスタンプ: {current_timestamp}")
 
