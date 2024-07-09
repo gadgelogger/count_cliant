@@ -1,12 +1,14 @@
 import torch
 import cv2
+import numpy as np
 import os
 from supabase import create_client, Client
 import time
 from config import supabase_url, supabase_key
 from datetime import datetime
+from picamera2 import Picamera2
 
-# Supabaseの設定(APIキーを取得する)
+# Supabaseの設定
 url: str = supabase_url
 key: str = supabase_key
 supabase: Client = create_client(url, key)
@@ -25,19 +27,19 @@ os.makedirs(save_directory, exist_ok=True)
 # YOLOv5モデルのロード
 model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
 
-# Webカメラのキャプチャを開始
-cap = cv2.VideoCapture(0)  # 0はデフォルトのカメラデバイス
+# Picamera2の設定
+picam2 = Picamera2()
+picam2.configure(picam2.create_preview_configuration(main={"format": 'RGB888', "size": (640, 480)}))
+picam2.start()
+
+# カメラの安定化を待つ
 time.sleep(2)
 
-if not cap.isOpened():
-    print("Webカメラを開くことができませんでした")
-    exit()
-
 # 写真を撮影する
-ret, frame = cap.read()
-if not ret:
-    print("フレームを取得できませんでした")
-    exit()
+frame = picam2.capture_array()
+
+# BGRからRGBに変換（必要な場合）
+# frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
 # 画像をモデルに渡して推論
 results = model(frame)
@@ -62,7 +64,7 @@ current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 # 撮影した写真を保存する（枠線描画後のフレームを使用）
 image_filename = "captured_image.jpg"
 image_path = os.path.join(save_directory, image_filename)
-cv2.imwrite(image_path, frame)
+cv2.imwrite(image_path, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
 print(f"写真を {image_path} に保存しました")
 
 # 撮影した画像をSupabaseのStorageにアップロード
@@ -90,5 +92,11 @@ print(f"Inserted data: {res}")
 print(f"人数: {person_count}")
 print(f"タイムスタンプ: {current_timestamp}")
 
-# リソースを解放
-cap.release()
+# カメラを停止
+picam2.stop()
+
+# デバッグ用：保存した画像を表示
+debug_image = cv2.imread(image_path)
+cv2.imshow("Captured Image", debug_image)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
