@@ -7,6 +7,7 @@ import time
 from config import supabase_url, supabase_key
 from datetime import datetime
 from picamera2 import Picamera2
+from ultralytics import YOLO
 
 # Supabaseの設定
 url: str = supabase_url
@@ -25,7 +26,7 @@ save_directory = "captured_images"
 os.makedirs(save_directory, exist_ok=True)
 
 # YOLOv5モデルのロード
-model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
+model = YOLO("yolo11n.pt")
 
 # Picamera2の設定
 picam2 = Picamera2()
