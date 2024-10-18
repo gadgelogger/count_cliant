@@ -14,7 +14,7 @@ url: str = supabase_url
 key: str = supabase_key
 supabase: Client = create_client(url, key)
 
-# superbase上のテーブル名とカラム情報を指定する
+# Supabase上のテーブル名とカラム情報を指定する
 table_name = "count"
 column_name = "person"
 column_type = "int8"
@@ -25,8 +25,8 @@ save_directory = "captured_images"
 # 保存先のディレクトリが存在しない場合は作成する
 os.makedirs(save_directory, exist_ok=True)
 
-# YOLOv5モデルのロード
-model = YOLO("yolo11n.pt")
+# YOLOv11モデルのロード
+model = YOLO("yolo11x.pt")
 
 # Picamera2の設定
 picam2 = Picamera2()
@@ -39,25 +39,18 @@ time.sleep(2)
 # 写真を撮影する
 frame = picam2.capture_array()
 
-# BGRからRGBに変換（必要な場合）
-# frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
 # 画像をモデルに渡して推論
-results = model(frame)
-
+results = model(frame, classes=[0], conf=0.3)
 # 結果の取得
-results_df = results.pandas().xyxy[0]
+human_count = results[0].boxes.data.shape[0]
 
-# 人間のクラスIDは0（COCOデータセットのクラスID）
-human_results = results_df[results_df['name'] == 'person']
-
-# 人数をカウント
-person_count = len(human_results)
 
 # 枠線の描画
-for index, row in human_results.iterrows():
-    x1, y1, x2, y2 = int(row['xmin']), int(row['ymin']), int(row['xmax']), int(row['ymax'])
-    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+for box in results[0].boxes:
+    x1, y1, x2, y2 = map(int, box.xyxy[0]) 
+    confidence = float(box.conf[0])  
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2) 
+    cv2.putText(frame, f'Person: {confidence:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
 # 現在のタイムスタンプを取得
 current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -71,7 +64,7 @@ print(f"写真を {image_path} に保存しました")
 # 撮影した画像をSupabaseのStorageにアップロード
 with open(image_path, 'rb') as f:
     image_data = f.read()
-    res = supabase.storage.from_('count').update(path=image_filename, file=image_data, file_options={"upsert": "true"})
+    res = supabase.storage.from_('count').upload(path=image_filename, file=image_data, file_options={"upsert": "true"})
     print(f"画像をSupabaseのStorageにアップロードしました: {res}")
 
 # アップロードした画像のURLを取得
@@ -86,11 +79,11 @@ if len(recent_records.data) == 24:
     supabase.table(table_name).delete().eq('time', oldest_record['time']).execute()
 
 # 新しいレコードを挿入（画像のURLを含む）
-data = {column_name: person_count, "time": current_timestamp, "image_url": image_url}
+data = {column_name: human_count, "time": current_timestamp, "image_url": image_url}
 res = supabase.table(table_name).insert(data).execute()
 print(f"Inserted data: {res}")
 
-print(f"人数: {person_count}")
+print(f"人数: {human_count}")
 print(f"タイムスタンプ: {current_timestamp}")
 
 # カメラを停止
