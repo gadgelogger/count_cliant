@@ -38,7 +38,8 @@ time.sleep(2)
 
 # 写真を撮影する
 frame = picam2.capture_array()
-
+# 画像を上下反転
+frame = cv2.flip(frame, 0)
 # 画像をモデルに渡して推論
 results = model(frame, classes=[0], conf=0.3)
 # 結果の取得
