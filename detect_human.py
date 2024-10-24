@@ -7,7 +7,8 @@ import time
 from config import supabase_url, supabase_key
 from datetime import datetime
 from picamera2 import Picamera2
-from ultralytics import YOLO
+from sahi import AutoDetectionModel
+from sahi.predict import get_sliced_prediction
 
 # Supabaseの設定
 url: str = supabase_url
@@ -25,8 +26,13 @@ save_directory = "captured_images"
 # 保存先のディレクトリが存在しない場合は作成する
 os.makedirs(save_directory, exist_ok=True)
 
-# YOLOv11モデルのロード
-model = YOLO("yolo11x.pt")
+# YOLO11モデルのロードをSAHIを使ったスライス推論に変更
+detection_model = AutoDetectionModel.from_pretrained(
+    model_type="yolov8",
+    model_path="yolo11x.pt",
+    confidence_threshold=0.3,
+    device="cpu"  # または 'cuda:0'
+)
 
 # Picamera2の設定
 picam2 = Picamera2()
@@ -40,17 +46,26 @@ time.sleep(2)
 frame = picam2.capture_array()
 # 画像を上下反転
 frame = cv2.flip(frame, 0)
-# 画像をモデルに渡して推論
-results = model(frame, classes=[0], conf=0.3)
-# 結果の取得
-human_count = results[0].boxes.data.shape[0]
 
+# SAHIを使ったスライス推論
+result = get_sliced_prediction(
+    frame,
+    detection_model,
+    slice_height=256,
+    slice_width=256,
+    overlap_height_ratio=0.2,
+    overlap_width_ratio=0.2,
+)
+
+# 結果の取得
+human_count = len(result.object_prediction_list)
 
 # 枠線の描画
-for box in results[0].boxes:
-    x1, y1, x2, y2 = map(int, box.xyxy[0]) 
-    confidence = float(box.conf[0])  
-    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2) 
+for object_prediction in result.object_prediction_list:
+    box = object_prediction.bbox
+    x1, y1, x2, y2 = map(int, [box.minx, box.miny, box.maxx, box.maxy])
+    confidence = object_prediction.score
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
     cv2.putText(frame, f'Person: {confidence:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
 # 現在のタイムスタンプを取得
