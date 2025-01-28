@@ -40,9 +40,15 @@ map1, map2 = cv2.fisheye.initUndistortRectifyMap(
 # YOLOモデルのロード
 model = YOLO("yolo11x.pt")
 
-# Picamera2の設定
+# Picamera2の初期化
 picam2 = Picamera2()
-picam2.configure(picam2.create_preview_configuration(main={"format": 'RGB888', "size": (640, 480)}))
+
+# 解像度を2592x1944に設定
+config = picam2.create_still_configuration({'format': 'RGB888'},main={"size": new_dim})
+picam2.configure(config)
+
+
+# カメラスタート
 picam2.start()
 
 # カメラの準備完了を待機
