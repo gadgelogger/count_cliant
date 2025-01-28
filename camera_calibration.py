@@ -6,8 +6,7 @@ import json
 
 # Picamera2の初期化
 picam2 = Picamera2()
-# 解像度を指定する
-picam2.configure(picam2.create_still_configuration(main={"size": (2592, 1944)}))
+
 # カメラスタート
 picam2.start()
 
@@ -27,7 +26,7 @@ objpoints = []
 imgpoints = []
 
 # 撮影する画像数
-num_images = 100
+num_images = 20
 successful_images = 0
 
 print("キャリブレーションを開始します...")
