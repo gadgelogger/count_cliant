@@ -87,11 +87,11 @@ try:
     # 現在のタイムスタンプを取得
     current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 画像を保存 (色空間変換なしでそのまま保存)
-    image_filename = f"captured_image_{current_timestamp.replace(':', '-')}.jpg"
+    # 画像を上書き保存 (ファイル名を固定)
+    image_filename = "captured_image.jpg"
     image_path = os.path.join(save_directory, image_filename)
     cv2.imwrite(image_path, undistorted_frame)  # 色空間変換なしで保存
-    print(f"画像が保存されました: {image_path}")
+    print(f"画像が上書き保存されました: {image_path}")
 
     # Supabase Storageに画像をアップロード
     with open(image_path, 'rb') as f:
