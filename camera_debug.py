@@ -28,8 +28,9 @@ K_scaled[1, 2] *= scale_y  # cy
 picam2 = Picamera2()
 
 # 解像度を2592x1944に設定
-config = picam2.create_still_configuration(main={"size": new_dim})
+config = picam2.create_still_configuration({'format': 'RGB888'},main={"size": new_dim})
 picam2.configure(config)
+
 
 # カメラスタート
 picam2.start()
