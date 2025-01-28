@@ -56,7 +56,7 @@ model = YOLO("yolo11x.pt")
 picam2 = Picamera2()
 
 # 解像度を2592x1944に設定し、フォーマットをRGB888に指定
-config = picam2.create_still_configuration({'format': 'RGB888'}, main={"size": new_dim})
+config = picam2.create_still_configuration(main={"size": new_dim, "format": 'RGB888'})
 picam2.configure(config)
 
 # カメラスタート
@@ -66,65 +66,60 @@ picam2.start()
 time.sleep(2)
 
 try:
-    while True:
-        # フレームを取得
-        frame = picam2.capture_array()
-        frame = cv2.rotate(frame, cv2.ROTATE_180)
+    # フレームを取得
+    frame = picam2.capture_array()
+    frame = cv2.rotate(frame, cv2.ROTATE_180)
 
-        # 魚眼補正を適用
-        undistorted_frame = cv2.remap(frame, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+    # 魚眼補正を適用
+    undistorted_frame = cv2.remap(frame, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
 
-        # YOLOを用いて人検出を実行
-        results = model(undistorted_frame, classes=[0], conf=0.3)
-        human_count = len(results[0].boxes)  # 検出された人数をカウント
+    # YOLOを用いて人検出を実行
+    results = model(undistorted_frame, classes=[0], conf=0.3)
+    human_count = len(results[0].boxes)  # 検出された人数をカウント
 
-        # 検出結果を描画
-        for box in results[0].boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            confidence = float(box.conf[0])
-            cv2.rectangle(undistorted_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(undistorted_frame, f'Person: {confidence:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    # 検出結果を描画
+    for box in results[0].boxes:
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+        confidence = float(box.conf[0])
+        cv2.rectangle(undistorted_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(undistorted_frame, f'Person: {confidence:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        # 現在のタイムスタンプを取得
-        current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # 現在のタイムスタンプを取得
+    current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # 画像を保存
-        image_filename = f"captured_image_{current_timestamp.replace(':', '-')}.jpg"
-        image_path = os.path.join(save_directory, image_filename)
-        cv2.imwrite(image_path, cv2.cvtColor(undistorted_frame, cv2.COLOR_RGB2BGR))
-        print(f"画像が保存されました: {image_path}")
+    # 画像を保存 (色空間変換なしでそのまま保存)
+    image_filename = f"captured_image_{current_timestamp.replace(':', '-')}.jpg"
+    image_path = os.path.join(save_directory, image_filename)
+    cv2.imwrite(image_path, undistorted_frame)  # 色空間変換なしで保存
+    print(f"画像が保存されました: {image_path}")
 
-        # Supabase Storageに画像をアップロード
-        with open(image_path, 'rb') as f:
-            image_data = f.read()
-            res = supabase.storage.from_('count').upload(path=image_filename, file=image_data, file_options={"upsert": "true"})
-            print(f"Supabase Storageに画像がアップロードされました: {res}")
+    # Supabase Storageに画像をアップロード
+    with open(image_path, 'rb') as f:
+        image_data = f.read()
+        res = supabase.storage.from_('count').upload(path=image_filename, file=image_data, file_options={"upsert": "true"})
+        print(f"Supabase Storageに画像がアップロードされました: {res}")
 
-        # 画像URLを取得
-        image_url = supabase.storage.from_('count').get_public_url(image_filename)
+    # 画像URLを取得
+    image_url = supabase.storage.from_('count').get_public_url(image_filename)
 
-        # 24時間以上の古いデータを削除
-        recent_records = supabase.table(table_name).select('*').order('time', desc=True).limit(24).execute()
+    # 24時間以上の古いデータを削除
+    recent_records = supabase.table(table_name).select('*').order('time', desc=True).limit(24).execute()
 
-        if len(recent_records.data) == 24:
-            # 最も古いレコードを削除
-            oldest_record = recent_records.data[-1]
-            supabase.table(table_name).delete().eq('time', oldest_record['time']).execute()
+    if len(recent_records.data) == 24:
+        # 最も古いレコードを削除
+        oldest_record = recent_records.data[-1]
+        supabase.table(table_name).delete().eq('time', oldest_record['time']).execute()
 
-        # Supabaseテーブルにデータを挿入
-        data = {column_name: human_count, "time": current_timestamp, "image_url": image_url}
-        res = supabase.table(table_name).insert(data).execute()
-        print(f"挿入されたデータ: {res}")
+    # Supabaseテーブルにデータを挿入
+    data = {column_name: human_count, "time": current_timestamp, "image_url": image_url}
+    res = supabase.table(table_name).insert(data).execute()
+    print(f"挿入されたデータ: {res}")
 
-        print(f"検出された人数: {human_count}")
-        print(f"タイムスタンプ: {current_timestamp}")
+    print(f"検出された人数: {human_count}")
+    print(f"タイムスタンプ: {current_timestamp}")
 
-        # 終了するにはEscキーを押す
-        if cv2.waitKey(1) & 0xFF == 27:  # Escキー
-            break
-
-except KeyboardInterrupt:
-    print("\nキャプチャが停止しました")
+except Exception as e:
+    print(f"エラーが発生しました: {e}")
 finally:
     picam2.stop()
     cv2.destroyAllWindows()
