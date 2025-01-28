@@ -6,6 +6,9 @@ import json
 
 # Picamera2の初期化
 picam2 = Picamera2()
+# 解像度を指定する
+picam2.configure(picam2.create_still_configuration(main={"size": (2592, 1944)}))
+# カメラスタート
 picam2.start()
 
 # チェッカーボードのサイズ
